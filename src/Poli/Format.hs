@@ -1,6 +1,5 @@
 module Poli.Format (format) where
 
-import Control.Arrow ((&&&))
 import Control.Monad (join, unless)
 import Data.Foldable (toList, traverse_)
 import Data.Generics.Uniplate.Data (universeBi)
@@ -10,7 +9,8 @@ import qualified Data.Map as M
 import qualified Data.Set as S
 import Data.Traversable (for)
 import Language.Haskell.Exts
-    ( Exp(List), Extension(EnableExtension), ParseMode(extensions, fixities, parseFilename)
+    ( Exp(LeftSection, InfixApp, List, RightSection)
+    , Extension(EnableExtension), ParseMode(extensions, fixities, parseFilename)
     , KnownExtension
         ( DataKinds, DefaultSignatures, DerivingStrategies, DerivingVia
         , GeneralizedNewtypeDeriving, LambdaCase, MultiParamTypeClasses
@@ -18,8 +18,9 @@ import Language.Haskell.Exts
         , TypeApplications, TypeFamilies, TypeOperators
         )
     , ParseResult(ParseFailed, ParseOk)
-    , SrcSpan(srcSpanFilename, srcSpanStartColumn, srcSpanStartLine), SrcSpanInfo(SrcSpanInfo)
-    , baseFixities, defaultParseMode, infixl_, infixr_, parseFileWithMode
+    , SrcSpan(srcSpanFilename, srcSpanStartColumn, srcSpanStartLine)
+    , SrcSpanInfo(SrcSpanInfo)
+    , ann, baseFixities, defaultParseMode, infixl_, infixr_, parseFileWithMode, srcSpanEnd, srcSpanStart
     )
 import System.Exit (exitFailure)
 import System.Directory (doesDirectoryExist, listDirectory)
@@ -79,8 +80,27 @@ formatFile path = do
         }
 
 formatExp :: Exp SrcSpanInfo -> [String]
+formatExp (InfixApp _ e1 op e2) = formatInfixApp (ann e1) (ann op) (ann e2)
 formatExp (List spn _) = formatList spn
+formatExp (LeftSection _ e1 op) = formatLeftSection (ann e1) (ann op)
+formatExp (RightSection _ op e1) = formatRightSection (ann op) (ann e1)
 formatExp _ = []
+
+formatLeftSection  :: SrcSpanInfo -> SrcSpanInfo -> [String]
+formatLeftSection (SrcSpanInfo e1 _) (SrcSpanInfo op _)
+    | srcSpanEnd e1 == srcSpanStart op = [formatError e1 "no space left of operator"]
+    | otherwise = []
+
+formatRightSection :: SrcSpanInfo -> SrcSpanInfo -> [String]
+formatRightSection (SrcSpanInfo op _) (SrcSpanInfo e1 _)
+    | srcSpanEnd op == srcSpanStart e1 = [formatError e1 "no space right of operator"]
+    | otherwise = []
+
+formatInfixApp :: SrcSpanInfo -> SrcSpanInfo -> SrcSpanInfo -> [String]
+formatInfixApp (SrcSpanInfo e1 _) (SrcSpanInfo op _) (SrcSpanInfo e2 _)
+    | srcSpanEnd e1 == srcSpanStart op = [formatError e1 "no space left of operator"]
+    | srcSpanEnd op == srcSpanStart e2 = [formatError e2 "no space right of operator"]
+    | otherwise = []
 
 formatList :: SrcSpanInfo -> [String]
 formatList (SrcSpanInfo spn pts)
@@ -97,4 +117,4 @@ formatError spn msg = srcSpanFilename spn
                    <> msg
 
 getIndentations :: [SrcSpan] -> Map Int Int
-getIndentations spns = M.fromListWith min $ (srcSpanStartLine &&& srcSpanStartColumn) <$> spns
+getIndentations spns = M.fromListWith min $ srcSpanStart <$> spns
