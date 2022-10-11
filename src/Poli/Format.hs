@@ -4,12 +4,13 @@ import Control.Monad (join, unless)
 import Data.Foldable (toList, traverse_)
 import Data.Generics.Uniplate.Data (universeBi)
 import qualified Data.List as L
-import Data.Map (Map)
 import qualified Data.Map as M
+import Data.Maybe (mapMaybe)
 import qualified Data.Set as S
 import Data.Traversable (for)
 import Language.Haskell.Exts
-    ( Exp(LeftSection, InfixApp, List, RightSection)
+    ( Context, Decl(TypeSig)
+    , Exp(LeftSection, InfixApp, List, RightSection)
     , Extension(EnableExtension), ParseMode(extensions, fixities, parseFilename)
     , KnownExtension
         ( DataKinds, DefaultSignatures, DerivingStrategies, DerivingVia
@@ -19,7 +20,7 @@ import Language.Haskell.Exts
         )
     , ParseResult(ParseFailed, ParseOk)
     , SrcSpan(srcSpanFilename, srcSpanStartColumn, srcSpanStartLine)
-    , SrcSpanInfo(SrcSpanInfo)
+    , SrcSpanInfo(SrcSpanInfo, srcInfoPoints), Type(TyFun)
     , ann, baseFixities, defaultParseMode, infixl_, infixr_, parseFileWithMode, srcSpanEnd, srcSpanStart
     )
 import System.Exit (exitFailure)
@@ -46,7 +47,8 @@ formatFile :: FilePath -> IO [String]
 formatFile path = do
     res <- parseFileWithMode parseMode path
     pure $ case res of
-        ParseOk m -> formatExp =<< universeBi m
+        ParseOk m -> (formatDecl =<< universeBi m)
+                  <> (formatExp =<< universeBi m)
         ParseFailed _ e -> [path <> " - " <> e]
   where
     parseMode = defaultParseMode
@@ -79,6 +81,20 @@ formatFile path = do
             ]
         }
 
+formatDecl :: Decl SrcSpanInfo -> [String]
+formatDecl (TypeSig spn _ ty) = formatTypeSig spn ty
+formatDecl _ = []
+
+formatTypeSig :: SrcSpanInfo -> Type SrcSpanInfo -> [String]
+formatTypeSig (SrcSpanInfo spn pts) ty
+    | and [ null ctxs || checkAligment (ctxs <> funs)
+          , checkAligment (pts <> ctxs <> funs)
+          ] = []
+    | otherwise = [formatError spn "misaligned type signature"]
+  where
+    ctxs = take 1 . reverse . srcInfoPoints . ann @Context =<< universeBi ty
+    funs = srcInfoPoints =<< mapMaybe getTyFun (universeBi ty)
+
 formatExp :: Exp SrcSpanInfo -> [String]
 formatExp (InfixApp _ e1 op e2) = formatInfixApp (ann e1) (ann op) (ann e2)
 formatExp (List spn _) = formatList spn
@@ -104,7 +120,7 @@ formatInfixApp (SrcSpanInfo e1 _) (SrcSpanInfo op _) (SrcSpanInfo e2 _)
 
 formatList :: SrcSpanInfo -> [String]
 formatList (SrcSpanInfo spn pts)
-    | length (S.fromList . toList $ getIndentations pts) == 1 = []
+    | checkAligment pts = []
     | otherwise = [formatError spn "misaligned list literal"]
 
 formatError :: SrcSpan -> String -> String
@@ -116,5 +132,10 @@ formatError spn msg = srcSpanFilename spn
                    <> " - "
                    <> msg
 
-getIndentations :: [SrcSpan] -> Map Int Int
-getIndentations spns = M.fromListWith min $ srcSpanStart <$> spns
+getTyFun :: Type SrcSpanInfo -> Maybe SrcSpanInfo
+getTyFun (TyFun spn _ _) = Just spn
+getTyFun _ = Nothing
+
+checkAligment :: [SrcSpan] -> Bool
+checkAligment spns = (<= 1) . length . S.fromList . toList
+                   . M.fromListWith min $ srcSpanEnd <$> spns
