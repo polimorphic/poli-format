@@ -1,11 +1,12 @@
 module Poli.Format (format) where
 
 import Control.Monad (join, unless)
+import Data.Char (isSpace)
 import Data.Foldable (toList, traverse_)
 import Data.Generics.Uniplate.Data (universeBi)
 import qualified Data.List as L
 import qualified Data.Map as M
-import Data.Maybe (mapMaybe)
+import Data.Maybe (fromMaybe, listToMaybe, mapMaybe)
 import qualified Data.Set as S
 import Data.Traversable (for)
 import Language.Haskell.Exts
@@ -19,9 +20,13 @@ import Language.Haskell.Exts
         , TypeApplications, TypeFamilies, TypeOperators
         )
     , ParseResult(ParseFailed, ParseOk)
-    , SrcSpan(srcSpanFilename, srcSpanStartColumn, srcSpanStartLine)
+    , SrcSpan
+        ( SrcSpan
+        , srcSpanFilename, srcSpanEndColumn, srcSpanEndLine, srcSpanStartColumn, srcSpanStartLine
+        )
     , SrcSpanInfo(SrcSpanInfo, srcInfoPoints), Type(TyFun)
-    , ann, baseFixities, defaultParseMode, infixl_, infixr_, parseFileWithMode, srcSpanEnd, srcSpanStart
+    , ann, baseFixities, defaultParseMode, infixl_, infixr_
+    , parseFileContentsWithMode, srcSpanEnd, srcSpanStart
     )
 import System.Exit (exitFailure)
 import System.Directory (doesDirectoryExist, listDirectory)
@@ -45,9 +50,11 @@ formatUnknown path = do
 
 formatFile :: FilePath -> IO [String]
 formatFile path = do
-    res <- parseFileWithMode parseMode path
+    file <- readFile path
+    let res = parseFileContentsWithMode parseMode file
     pure $ case res of
-        ParseOk m -> (formatDecl =<< universeBi m)
+        ParseOk m -> formatRaw path file
+                  <> (formatDecl =<< universeBi m)
                   <> (formatExp =<< universeBi m)
         ParseFailed _ e -> [path <> " - " <> e]
   where
@@ -80,6 +87,32 @@ formatFile path = do
             , infixl_ 0 [":-"]
             ]
         }
+
+formatRaw :: FilePath -> String -> [String]
+formatRaw nm fl = join res
+  where
+    lns = lines fl
+    spn = SrcSpan
+        { srcSpanFilename = nm
+        , srcSpanStartLine = 1
+        , srcSpanStartColumn = 1
+        , srcSpanEndLine = 1 + length lns
+        , srcSpanEndColumn = fromMaybe 1 $ length <$> listToMaybe (reverse lns)
+        }
+    lspn n ln = spn
+        { srcSpanStartLine = n
+        , srcSpanEndLine = n
+        , srcSpanEndColumn = 1 + length ln
+        }
+    res = zipWith (\n ln -> formatLine (lspn n ln) ln) [1 ..] (lines fl)
+
+formatLine :: SrcSpan -> String -> [String]
+formatLine spn ln
+    | spacetrail > 0 = [formatError spacespn "trailing whitespace"]
+    | otherwise = []
+  where
+    spacetrail = length . takeWhile isSpace $ reverse ln
+    spacespn = spn { srcSpanStartColumn = 1 + length ln - spacetrail }
 
 formatDecl :: Decl SrcSpanInfo -> [String]
 formatDecl (TypeSig spn _ ty) = formatTypeSig spn ty
