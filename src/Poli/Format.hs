@@ -30,6 +30,7 @@ import Language.Haskell.Exts
     )
 import System.Exit (exitFailure)
 import System.Directory (doesDirectoryExist, listDirectory)
+import System.IO (IOMode(ReadMode), hGetContents, hSetEncoding, openFile, utf8)
 
 format :: FilePath -> IO ()
 format path = do
@@ -50,7 +51,9 @@ formatUnknown path = do
 
 formatFile :: FilePath -> IO [String]
 formatFile path = do
-    file <- readFile path
+    h <- openFile path ReadMode
+    hSetEncoding h utf8
+    file <- hGetContents h
     let res = parseFileContentsWithMode parseMode file
     pure $ case res of
         ParseOk m -> formatRaw path file
