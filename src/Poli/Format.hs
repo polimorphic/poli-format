@@ -11,7 +11,7 @@ import qualified Data.Set as S
 import Data.Traversable (for)
 import Language.Haskell.Exts
     ( Context, Decl(TypeSig)
-    , Exp(LeftSection, InfixApp, List, RightSection)
+    , Exp(InfixApp, LeftSection, List, Paren, RightSection, Tuple)
     , Extension(EnableExtension), ParseMode(extensions, fixities, parseFilename)
     , KnownExtension
         ( DataKinds, DefaultSignatures, DerivingStrategies, DerivingVia
@@ -133,7 +133,9 @@ formatTypeSig (SrcSpanInfo spn pts) ty
 
 formatExp :: Exp SrcSpanInfo -> [String]
 formatExp (InfixApp _ e1 op e2) = formatInfixApp (ann e1) (ann op) (ann e2)
+formatExp (Tuple spn _ _) = formatTuple spn
 formatExp (List spn _) = formatList spn
+formatExp (Paren spn _) = formatParen spn
 formatExp (LeftSection _ e1 op) = formatLeftSection (ann e1) (ann op)
 formatExp (RightSection _ op e1) = formatRightSection (ann op) (ann e1)
 formatExp _ = []
@@ -154,10 +156,20 @@ formatInfixApp (SrcSpanInfo e1 _) (SrcSpanInfo op _) (SrcSpanInfo e2 _)
     | srcSpanEnd op == srcSpanStart e2 = [formatError e2 "no space right of operator"]
     | otherwise = []
 
+formatTuple :: SrcSpanInfo -> [String]
+formatTuple (SrcSpanInfo spn pts)
+    | checkAligment pts = []
+    | otherwise = [formatError spn "misaligned tuple literal"]
+
 formatList :: SrcSpanInfo -> [String]
 formatList (SrcSpanInfo spn pts)
     | checkAligment pts = []
     | otherwise = [formatError spn "misaligned list literal"]
+
+formatParen :: SrcSpanInfo -> [String]
+formatParen (SrcSpanInfo spn pts)
+    | checkAligment pts = []
+    | otherwise = [formatError spn "misaligned parens"]
 
 formatError :: SrcSpan -> String -> String
 formatError spn msg = srcSpanFilename spn
