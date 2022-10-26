@@ -20,6 +20,7 @@ import Language.Haskell.Exts
         , TypeApplications, TypeFamilies, TypeOperators
         )
     , ParseResult(ParseFailed, ParseOk)
+    , Pat(PInfixApp)
     , SrcSpan
         ( SrcSpan
         , srcSpanFilename, srcSpanEndColumn, srcSpanEndLine, srcSpanStartColumn, srcSpanStartLine
@@ -58,6 +59,7 @@ formatFile path = do
     pure $ case res of
         ParseOk m -> formatRaw path file
                   <> (formatDecl =<< universeBi m)
+                  <> (formatPat =<< universeBi m)
                   <> (formatExp =<< universeBi m)
         ParseFailed _ e -> [path <> " - " <> e]
   where
@@ -131,8 +133,12 @@ formatTypeSig (SrcSpanInfo spn pts) ty
     ctxs = take 1 . reverse . srcInfoPoints . ann @Context =<< universeBi ty
     funs = srcInfoPoints =<< mapMaybe getTyFun (universeBi ty)
 
+formatPat :: Pat SrcSpanInfo -> [String]
+formatPat (PInfixApp _ e1 op e2) = formatInfixSpacing (ann e1) (ann op) (ann e2)
+formatPat _ = []
+
 formatExp :: Exp SrcSpanInfo -> [String]
-formatExp (InfixApp _ e1 op e2) = formatInfixApp (ann e1) (ann op) (ann e2)
+formatExp (InfixApp _ e1 op e2) = formatInfixSpacing (ann e1) (ann op) (ann e2)
 formatExp (Tuple spn _ _) = formatTuple spn
 formatExp (List spn _) = formatList spn
 formatExp (Paren spn _) = formatParen spn
@@ -150,8 +156,8 @@ formatRightSection (SrcSpanInfo op _) (SrcSpanInfo e1 _)
     | srcSpanEnd op == srcSpanStart e1 = [formatError e1 "no space right of operator"]
     | otherwise = []
 
-formatInfixApp :: SrcSpanInfo -> SrcSpanInfo -> SrcSpanInfo -> [String]
-formatInfixApp (SrcSpanInfo e1 _) (SrcSpanInfo op _) (SrcSpanInfo e2 _)
+formatInfixSpacing :: SrcSpanInfo -> SrcSpanInfo -> SrcSpanInfo -> [String]
+formatInfixSpacing (SrcSpanInfo e1 _) (SrcSpanInfo op _) (SrcSpanInfo e2 _)
     | srcSpanEnd e1 == srcSpanStart op = [formatError e1 "no space left of operator"]
     | srcSpanEnd op == srcSpanStart e2 = [formatError e2 "no space right of operator"]
     | otherwise = []
