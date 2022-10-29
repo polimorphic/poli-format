@@ -11,7 +11,7 @@ import qualified Data.Set as S
 import Data.Traversable (for)
 import Language.Haskell.Exts
     ( Context, Decl(TypeSig)
-    , Exp(InfixApp, LeftSection, List, Paren, RightSection, Tuple)
+    , Exp(InfixApp, LeftSection, List, Paren, RecConstr, RecUpdate, RightSection, Tuple)
     , Extension(EnableExtension), ParseMode(extensions, fixities, parseFilename)
     , KnownExtension
         ( DataKinds, DefaultSignatures, DerivingStrategies, DerivingVia
@@ -25,7 +25,7 @@ import Language.Haskell.Exts
         ( SrcSpan
         , srcSpanFilename, srcSpanEndColumn, srcSpanEndLine, srcSpanStartColumn, srcSpanStartLine
         )
-    , SrcSpanInfo(SrcSpanInfo, srcInfoPoints), Type(TyFun)
+    , SrcSpanInfo(SrcSpanInfo, srcInfoPoints, srcInfoSpan), Type(TyFun)
     , ann, baseFixities, defaultParseMode, infixl_, infixr_
     , parseFileContentsWithMode, srcSpanEnd, srcSpanStart
     )
@@ -139,11 +139,13 @@ formatPat _ = []
 
 formatExp :: Exp SrcSpanInfo -> [String]
 formatExp (InfixApp _ e1 op e2) = formatInfixSpacing (ann e1) (ann op) (ann e2)
-formatExp (Tuple spn _ _) = formatTuple spn
-formatExp (List spn _) = formatList spn
-formatExp (Paren spn _) = formatParen spn
+formatExp (Tuple spn _ es) = formatCommaSeparated spn (ann <$> es)
+formatExp (List spn es) = formatCommaSeparated spn (ann <$> es)
+formatExp (Paren spn e) = formatCommaSeparated spn [ann e]
 formatExp (LeftSection _ e1 op) = formatLeftSection (ann e1) (ann op)
 formatExp (RightSection _ op e1) = formatRightSection (ann op) (ann e1)
+formatExp (RecConstr spn _ fus) = formatCommaSeparated spn (ann <$> fus)
+formatExp (RecUpdate spn _ fus) = formatCommaSeparated spn (ann <$> fus)
 formatExp _ = []
 
 formatLeftSection  :: SrcSpanInfo -> SrcSpanInfo -> [String]
@@ -162,20 +164,23 @@ formatInfixSpacing (SrcSpanInfo e1 _) (SrcSpanInfo op _) (SrcSpanInfo e2 _)
     | srcSpanEnd op == srcSpanStart e2 = [formatError e2 "no space right of operator"]
     | otherwise = []
 
-formatTuple :: SrcSpanInfo -> [String]
-formatTuple (SrcSpanInfo spn pts)
-    | checkAligment pts = []
-    | otherwise = [formatError spn "misaligned tuple literal"]
-
-formatList :: SrcSpanInfo -> [String]
-formatList (SrcSpanInfo spn pts)
-    | checkAligment pts = []
-    | otherwise = [formatError spn "misaligned list literal"]
-
-formatParen :: SrcSpanInfo -> [String]
-formatParen (SrcSpanInfo spn pts)
-    | checkAligment pts = []
-    | otherwise = [formatError spn "misaligned parens"]
+formatCommaSeparated :: SrcSpanInfo -> [SrcSpanInfo] -> [String]
+formatCommaSeparated (SrcSpanInfo spn pts) es
+    | not $ checkAligment pts = [formatError spn "inconsistent literal indentation"]
+    | not $ checkAligment (take 1 pts <> take 1 (reverse pts))
+        = [formatError spn "inconsistent bracket indentation"]
+    | not $ allEqual (postOpen <> preClose) || all (== Newline) preClose
+        = [formatError spn "inconsistent bracket padding"]
+    | any (== Space) preComma = [formatError spn "erroneous space before comma"]
+    | any (== Touching) postComma = [formatError spn "missing space after comma"]
+    | any (== Newline) postComma = [formatError spn "trailing comma"]
+    | otherwise = []
+  where
+    postOpen = combine (take 1 pts) (srcInfoSpan <$> take 1 es)
+    preComma = combine (srcInfoSpan <$> take (length es - 1) es) (drop 1 pts)
+    postComma = combine (drop 1 pts) (srcInfoSpan <$> drop 1 es)
+    preClose = combine (srcInfoSpan <$> take 1 (reverse es)) (take 1 $ reverse pts)
+    combine = zipWith compareSpans
 
 formatError :: SrcSpan -> String -> String
 formatError spn msg = srcSpanFilename spn
@@ -191,5 +196,19 @@ getTyFun (TyFun spn _ _) = Just spn
 getTyFun _ = Nothing
 
 checkAligment :: [SrcSpan] -> Bool
-checkAligment spns = (<= 1) . length . S.fromList . toList
-                   . M.fromListWith min $ srcSpanEnd <$> spns
+checkAligment spns = allEqual . M.fromListWith min $ srcSpanEnd <$> spns
+
+allEqual :: (Foldable f, Ord a) => f a -> Bool
+allEqual = (<= 1) . length . S.fromList . toList
+
+compareSpans :: SrcSpan -> SrcSpan -> SpanComparison
+compareSpans a b
+    | srcSpanEnd a == srcSpanStart b = Touching
+    | srcSpanEndLine a == srcSpanStartLine b = Space
+    | otherwise = Newline
+
+data SpanComparison
+    = Touching
+    | Space
+    | Newline
+    deriving (Eq, Ord, Show)
