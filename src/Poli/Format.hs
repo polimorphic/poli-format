@@ -20,7 +20,7 @@ import Language.Haskell.Exts
         , TypeApplications, TypeFamilies, TypeOperators
         )
     , ParseResult(ParseFailed, ParseOk)
-    , Pat(PInfixApp)
+    , Pat(PInfixApp, PList, PParen, PRec, PTuple)
     , SrcSpan
         ( SrcSpan
         , srcSpanFilename, srcSpanEndColumn, srcSpanEndLine, srcSpanStartColumn, srcSpanStartLine
@@ -135,6 +135,10 @@ formatTypeSig (SrcSpanInfo spn pts) ty
 
 formatPat :: Pat SrcSpanInfo -> [String]
 formatPat (PInfixApp _ e1 op e2) = formatInfixSpacing (ann e1) (ann op) (ann e2)
+formatPat (PTuple spn _ es) = formatCommaSeparated spn (ann <$> es)
+formatPat (PList spn es) = formatCommaSeparated spn (ann <$> es)
+formatPat (PParen spn e) = formatCommaSeparated spn [ann e]
+formatPat (PRec spn _ pfs) = formatCommaSeparated spn (ann <$> pfs)
 formatPat _ = []
 
 formatExp :: Exp SrcSpanInfo -> [String]
