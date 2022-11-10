@@ -94,7 +94,7 @@ formatFile path = do
         }
 
 formatRaw :: FilePath -> String -> [String]
-formatRaw nm fl = join res
+formatRaw nm fl = formatLines $ zipWith (\n ln -> (lspn n ln, ln)) [1 ..] lns
   where
     lns = lines fl
     spn = SrcSpan
@@ -109,7 +109,14 @@ formatRaw nm fl = join res
         , srcSpanEndLine = n
         , srcSpanEndColumn = 1 + length ln
         }
-    res = zipWith (\n ln -> formatLine (lspn n ln) ln) [1 ..] (lines fl)
+
+formatLines :: [(SrcSpan, String)] -> [String]
+formatLines lns
+    = foldMap (uncurry formatLine) lns
+   <> join (zipWith checkDouble lns (drop 1 lns))
+  where
+    checkDouble (_, "") (spn, "") = [formatError spn "double blank line"]
+    checkDouble _ _ = []
 
 formatLine :: SrcSpan -> String -> [String]
 formatLine spn ln
