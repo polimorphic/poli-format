@@ -11,7 +11,7 @@ import qualified Data.Set as S
 import Data.Traversable (for)
 import Language.Haskell.Exts
     ( Context, Decl(TypeSig)
-    , Exp(InfixApp, LeftSection, List, Paren, RecConstr, RecUpdate, RightSection, Tuple)
+    , Exp(App, InfixApp, LeftSection, List, Paren, RecConstr, RecUpdate, RightSection, Tuple)
     , Extension(EnableExtension), ParseMode(extensions, fixities, parseFilename)
     , KnownExtension
         ( DataKinds, DefaultSignatures, DerivingStrategies, DerivingVia
@@ -150,6 +150,7 @@ formatPat _ = []
 
 formatExp :: Exp SrcSpanInfo -> [String]
 formatExp (InfixApp _ e1 op e2) = formatInfixSpacing (ann e1) (ann op) (ann e2)
+formatExp (App _ e1 e2) = formatAppSpacing (ann e1) (ann e2)
 formatExp (Tuple spn _ es) = formatCommaSeparated spn (ann <$> es)
 formatExp (List spn es) = formatCommaSeparated spn (ann <$> es)
 formatExp (Paren spn e) = formatCommaSeparated spn [ann e]
@@ -173,6 +174,11 @@ formatInfixSpacing :: SrcSpanInfo -> SrcSpanInfo -> SrcSpanInfo -> [String]
 formatInfixSpacing (SrcSpanInfo e1 _) (SrcSpanInfo op _) (SrcSpanInfo e2 _)
     | srcSpanEnd e1 == srcSpanStart op = [formatError e1 "no space left of operator"]
     | srcSpanEnd op == srcSpanStart e2 = [formatError e2 "no space right of operator"]
+    | otherwise = []
+
+formatAppSpacing :: SrcSpanInfo -> SrcSpanInfo -> [String]
+formatAppSpacing (SrcSpanInfo e1 _) (SrcSpanInfo e2 _)
+    | srcSpanEnd e1 == srcSpanStart e2 = [formatError e2 "no space in function application"]
     | otherwise = []
 
 formatCommaSeparated :: SrcSpanInfo -> [SrcSpanInfo] -> [String]
