@@ -84,11 +84,11 @@ formatFile path = do
         , fixities = Just $ baseFixities <> join
             [ infixl_ 8 ["^.", "^..", "^?"]
             , infixr_ 8 [".="]
-            , infixl_ 4 ["!=.", "<.", "<=.", "==.", ">.", ">=."]
+            , infixl_ 4 ["!=.", "<$?>", "<.", "<=.", "==.", ">.", ">=."]
             , infixr_ 4 ["%~", ".~", "?~"]
             , infixr_ 3 ["&&.", ":<|>"]
             , infixr_ 2 ["||."]
-            , infixl_ 1 ["&", "<&>"]
+            , infixl_ 1 ["&", "<&>", "<&?>"]
             , infixl_ 0 [":-"]
             ]
         }
