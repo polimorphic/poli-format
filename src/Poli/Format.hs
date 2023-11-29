@@ -74,6 +74,7 @@ formatFile path = do
             , LambdaCase
             , MultiParamTypeClasses
             , MultiWayIf
+            , PatternSynonyms
             , ScopedTypeVariables
             , TemplateHaskell
             , TupleSections
