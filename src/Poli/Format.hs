@@ -16,7 +16,7 @@ import Language.Haskell.Exts
     , KnownExtension
         ( DataKinds, DefaultSignatures, DerivingStrategies, DerivingVia
         , GeneralizedNewtypeDeriving, LambdaCase, MultiParamTypeClasses
-        , MultiWayIf, ScopedTypeVariables, TemplateHaskell, TupleSections
+        , MultiWayIf, PatternSynonyms, ScopedTypeVariables, TemplateHaskell, TupleSections
         , TypeApplications, TypeFamilies, TypeOperators
         )
     , ParseResult(ParseFailed, ParseOk)
@@ -74,6 +74,7 @@ formatFile path = do
             , LambdaCase
             , MultiParamTypeClasses
             , MultiWayIf
+            , PatternSynonyms
             , ScopedTypeVariables
             , TemplateHaskell
             , TupleSections
